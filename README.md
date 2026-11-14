@@ -16,13 +16,9 @@ This repository only translates that work into Rust. If CHOpt has been useful to
 
 ## Why this exists
 
-[Truss](https://github.com/graindead) is a single-file Rust app. It needed CHOpt's pathing built in, as a tab that can path any chart in your library. CHOpt is a C++/Qt program, so using it directly would have meant shipping it and its Qt libraries alongside Truss and running it as a separate process.
+[Truss](https://github.com/graindead) is a single-file Rust app. I wanted to offer CHOpt's pathing inside it, as a tab that can path any chart in your library. CHOpt is a C++/Qt program, so including it as it is would have meant shipping it and its Qt libraries alongside Truss and running it as a separate process.
 
-Porting the Clone Hero parts to Rust let Truss do three things that CHOpt's design didn't allow:
-
-- call the pathing directly;
-- cancel a run part-way;
-- show the path image while it's still being drawn.
+Porting the Clone Hero parts to Rust let them fit into Truss directly. Truss can call the pathing itself, cancel a run part-way, and show the path image while it's still being drawn.
 
 This repository publishes that port on its own, so the code is public under CHOpt's licence.
 
