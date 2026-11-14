@@ -1,0 +1,28 @@
+[package]
+name = "chopt-tr"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "CHOpt Truss: a Rust port of CHOpt, the Star Power path optimiser for Clone Hero"
+repository = "https://github.com/graindead/chopt-tr"
+authors = ["graindead"]
+
+[lib]
+name = "chopt"
+path = "src/lib.rs"
+
+[[bin]]
+name = "chopt-tr"
+path = "src/main.rs"
+
+[dependencies]
+tiny-skia = "0.11"
+cosmic-text = "0.15"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_System_Threading"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
