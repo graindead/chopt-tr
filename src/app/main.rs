@@ -93,6 +93,15 @@ fn initial_window() -> (iced::Size, iced::window::Position) {
     (want, iced::window::Position::Centered)
 }
 
+/// The settings with a slider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Field {
+    Squeeze,
+    EarlyWhammy,
+    VideoLag,
+    Opacity,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
     Path,
@@ -131,6 +140,8 @@ struct App {
     lazy: String,
     delay: String,
     speed: String,
+    /// What's typed in each slider's value box.
+    slider_text: [String; 4],
     running: Option<Arc<AtomicBool>>,
     run_id: u64,
     result: Option<Result<Arc<Found>, String>>,
@@ -156,6 +167,8 @@ enum Message {
     Speed(String),
     VideoLag(i32),
     Opacity(u32),
+    /// Text typed in a slider's value box.
+    SliderText(Field, String),
     DrawBpms(bool),
     DrawTimeSigs(bool),
     DrawSolos(bool),
@@ -252,6 +265,7 @@ impl App {
             lazy: settings.lazy_whammy_ms.to_string(),
             delay: settings.whammy_delay_ms.to_string(),
             speed: settings.speed.to_string(),
+            slider_text: Default::default(),
             settings,
             frosted,
             page: Page::Path,
@@ -265,6 +279,7 @@ impl App {
             note: None,
             opened: None,
         };
+        app.sync_slider_text();
         let mut task = app.backdrop_task();
         // A chart given on the command line (or through "Open with").
         if let Some(file) = std::env::args_os().nth(1).map(PathBuf::from).filter(|p| p.is_file()) {
@@ -333,6 +348,17 @@ impl App {
             blank: s.blank,
             activation_opacity: s.activation_opacity as f32 / 100.0,
         }
+    }
+
+    /// Shows each slider's value in its box.
+    fn sync_slider_text(&mut self) {
+        let s = &self.settings;
+        self.slider_text = [
+            s.squeeze.to_string(),
+            s.early_whammy.to_string(),
+            s.video_lag_ms.to_string(),
+            format!("{:.2}", s.activation_opacity as f32 / 100.0),
+        ];
     }
 
     fn stop(&mut self) {
@@ -424,8 +450,42 @@ impl App {
                 save = false;
                 self.difficulty = d;
             }
-            Message::Squeeze(v) => self.settings.squeeze = v,
-            Message::EarlyWhammy(v) => self.settings.early_whammy = v,
+            Message::Squeeze(v) => {
+                self.settings.squeeze = v;
+                self.sync_slider_text();
+            }
+            Message::EarlyWhammy(v) => {
+                self.settings.early_whammy = v;
+                self.sync_slider_text();
+            }
+            Message::SliderText(f, t) => {
+                // Applied as soon as it's a value the slider can take; the slider follows.
+                let st = &mut self.settings;
+                let t2 = t.trim().trim_end_matches(['%', ' ']).trim_end_matches("ms").trim();
+                match f {
+                    Field::Squeeze => {
+                        if let Some(v) = to_int(t2).filter(|v| (0..=100).contains(v)) {
+                            st.squeeze = v as u32;
+                        }
+                    }
+                    Field::EarlyWhammy => {
+                        if let Some(v) = to_int(t2).filter(|v| (0..=100).contains(v)) {
+                            st.early_whammy = v as u32;
+                        }
+                    }
+                    Field::VideoLag => {
+                        if let Some(v) = to_int(t2).filter(|v| (-200..=200).contains(v)) {
+                            st.video_lag_ms = v;
+                        }
+                    }
+                    Field::Opacity => {
+                        if let Some(v) = t2.parse::<f32>().ok().filter(|v| (0.0..=1.0).contains(v)) {
+                            st.activation_opacity = (v * 100.0).round() as u32;
+                        }
+                    }
+                }
+                self.slider_text[f as usize] = t;
+            }
             Message::Lazy(s) => {
                 if let Some(v) = to_int(&s) {
                     self.settings.lazy_whammy_ms = v;
@@ -444,8 +504,14 @@ impl App {
                 }
                 self.speed = s;
             }
-            Message::VideoLag(v) => self.settings.video_lag_ms = v,
-            Message::Opacity(v) => self.settings.activation_opacity = v,
+            Message::VideoLag(v) => {
+                self.settings.video_lag_ms = v;
+                self.sync_slider_text();
+            }
+            Message::Opacity(v) => {
+                self.settings.activation_opacity = v;
+                self.sync_slider_text();
+            }
             Message::DrawBpms(b) => self.settings.draw_bpms = b,
             Message::DrawTimeSigs(b) => self.settings.draw_time_sigs = b,
             Message::DrawSolos(b) => self.settings.draw_solos = b,
@@ -592,6 +658,7 @@ impl App {
                 self.lazy = self.settings.lazy_whammy_ms.to_string();
                 self.delay = self.settings.whammy_delay_ms.to_string();
                 self.speed = self.settings.speed.to_string();
+                self.sync_slider_text();
             }
             Message::Link(url) => {
                 save = false;
@@ -681,7 +748,14 @@ impl App {
         };
 
         row![
-            scrollable(container(left).padding(16)).height(Length::Fill),
+            // The settings scroll; Find path stays in view below them.
+            column![
+                scrollable(container(left).padding(iced::Padding { top: 16.0, right: 12.0, bottom: 16.0, left: 16.0 })).spacing(4).height(Length::Fill),
+                style::divider(false),
+                container(self.view_go()).padding([12, 16]),
+            ]
+            .width(372)
+            .height(Length::Fill),
             style::divider(true),
             container(right).width(Length::Fill).height(Length::Fill)
         ]
@@ -721,7 +795,28 @@ impl App {
         let s = &self.settings;
         let label = |l: &'static str| text(l).size(13).width(130);
         let line = |l: &'static str, w: Element<'static, Message>| -> Element<'static, Message> { row![label(l), w].spacing(8).align_y(Alignment::Center).into() };
-        let value = |v: String| text(v).size(12).width(44).align_x(iced::alignment::Horizontal::Right);
+        // A slider under its label, with its value in a box you can type in. Hovering it, the
+        // arrow keys (or Ctrl + mouse wheel) move it one step; Ctrl-click resets it.
+        let slider_field = |l: &'static str, f: Field, sl: Element<'static, Message>| -> Element<'_, Message> {
+            column![
+                row![
+                    text(l).size(13).width(Length::Fill),
+                    text_input("", &self.slider_text[f as usize])
+                        .on_input(move |t| Message::SliderText(f, t))
+                        .on_submit(Message::Run)
+                        .padding([3, 6])
+                        .width(64)
+                        .size(13)
+                        .align_x(iced::alignment::Horizontal::Right)
+                        .style(style::input),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+                sl,
+            ]
+            .spacing(2)
+            .into()
+        };
         let num = |v: &str, msg: fn(String) -> Message| text_input("0", v).on_input(msg).on_submit(Message::Run).padding(5).width(90).size(13).style(style::input);
         let toggle = |on: bool, l: &'static str, msg: fn(bool) -> Message| toggler(on).label(l).text_size(13).size(18.0).on_toggle(msg);
 
@@ -734,6 +829,49 @@ impl App {
         let inst_pick = pick_list(insts, song.map(|_| self.instrument), Message::Instrument).width(Length::Fill).text_size(13).style(style::quiet_pick_list);
         let diff_pick = pick_list(diffs, song.map(|_| self.difficulty), Message::Difficulty).width(Length::Fill).text_size(13).style(style::quiet_pick_list);
 
+
+        column![
+            line("Engine", text("Clone Hero").size(13).into()),
+            row![label("Instrument"), inst_pick].spacing(8).align_y(Alignment::Center),
+            row![label("Difficulty"), diff_pick].spacing(8).align_y(Alignment::Center),
+            style::divider(false),
+            slider_field("Squeeze %", Field::Squeeze, slider(0..=100u32, s.squeeze, Message::Squeeze).default(100u32).shift_step(5u32).height(22).into()),
+            slider_field(
+                "Early Whammy %",
+                Field::EarlyWhammy,
+                slider(0..=100u32, s.early_whammy, Message::EarlyWhammy).default(100u32).shift_step(5u32).height(22).into()
+            ),
+            row![label("Lazy Whammy (ms)"), num(&self.lazy, Message::Lazy)].spacing(8).align_y(Alignment::Center),
+            row![label("Whammy Delay (ms)"), num(&self.delay, Message::Delay)].spacing(8).align_y(Alignment::Center),
+            row![label("Speed (%)"), num(&self.speed, Message::Speed)].spacing(8).align_y(Alignment::Center),
+            slider_field("Video Lag (ms)", Field::VideoLag, slider(-200..=200i32, s.video_lag_ms, Message::VideoLag).default(0).shift_step(5).height(22).into()),
+            slider_field(
+                "Activation Opacity",
+                Field::Opacity,
+                slider(0..=100u32, s.activation_opacity, Message::Opacity).default(33u32).shift_step(5u32).height(22).into()
+            ),
+            text("Click a value to type it. Over a slider, \u{2191} / \u{2193} or Ctrl + mouse wheel move it one step, Shift snaps to 5s and Ctrl-click resets it.")
+                .size(11)
+                .style(style::muted_text),
+            style::divider(false),
+            toggle(s.draw_bpms, "Draw BPMs", Message::DrawBpms),
+            toggle(s.draw_time_sigs, "Draw Time Signatures", Message::DrawTimeSigs),
+            toggle(s.draw_solos, "Draw solo sections", Message::DrawSolos),
+            toggle(s.blank, "Blank chart", Message::Blank),
+            toggle(s.precision, "Precision Mode", Message::Precision),
+            toggle(s.lefty, "Lefty flip", Message::Lefty),
+        ]
+        .spacing(10)
+        .into()
+    }
+
+    /// Find path (or Stop while it runs).
+    fn view_go(&self) -> Element<'_, Message> {
+        let s = &self.settings;
+        let song = match &self.chart {
+            Some(Ok(c)) => Some(&c.song),
+            _ => None,
+        };
         let go: Element<'_, Message> = if self.running.is_some() {
             row![
                 button(text("Optimising…").size(14)).padding([8, 16]).style(style::primary),
@@ -746,37 +884,7 @@ impl App {
             let label = if s.blank { "Draw image" } else { "Find path" };
             button(text(label).size(14)).padding([8, 16]).style(style::primary).on_press_maybe(song.map(|_| Message::Run)).into()
         };
-
-        column![
-            line("Engine", text("Clone Hero").size(13).into()),
-            row![label("Instrument"), inst_pick].spacing(8).align_y(Alignment::Center),
-            row![label("Difficulty"), diff_pick].spacing(8).align_y(Alignment::Center),
-            style::divider(false),
-            row![label("Squeeze %"), slider(0..=100u32, s.squeeze, Message::Squeeze), value(s.squeeze.to_string())].spacing(8).align_y(Alignment::Center),
-            row![label("Early Whammy %"), slider(0..=100u32, s.early_whammy, Message::EarlyWhammy), value(s.early_whammy.to_string())]
-                .spacing(8)
-                .align_y(Alignment::Center),
-            row![label("Lazy Whammy (ms)"), num(&self.lazy, Message::Lazy)].spacing(8).align_y(Alignment::Center),
-            row![label("Whammy Delay (ms)"), num(&self.delay, Message::Delay)].spacing(8).align_y(Alignment::Center),
-            row![label("Speed (%)"), num(&self.speed, Message::Speed)].spacing(8).align_y(Alignment::Center),
-            row![label("Video Lag"), slider(-200..=200i32, s.video_lag_ms, Message::VideoLag), value(s.video_lag_ms.to_string())]
-                .spacing(8)
-                .align_y(Alignment::Center),
-            row![label("Activation Opacity"), slider(0..=100u32, s.activation_opacity, Message::Opacity), value(format!("{:.2}", s.activation_opacity as f32 / 100.0))]
-                .spacing(8)
-                .align_y(Alignment::Center),
-            style::divider(false),
-            toggle(s.draw_bpms, "Draw BPMs", Message::DrawBpms),
-            toggle(s.draw_time_sigs, "Draw Time Signatures", Message::DrawTimeSigs),
-            toggle(s.draw_solos, "Draw solo sections", Message::DrawSolos),
-            toggle(s.blank, "Blank chart", Message::Blank),
-            toggle(s.precision, "Precision Mode", Message::Precision),
-            toggle(s.lefty, "Lefty flip", Message::Lefty),
-            space().height(4),
-            go,
-        ]
-        .spacing(10)
-        .into()
+        go
     }
 
     fn view_settings(&self) -> Element<'_, Message> {
