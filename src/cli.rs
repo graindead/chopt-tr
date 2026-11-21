@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 const USAGE: &str = "\
-Usage: chopt-tr <chart folder> [options]
+Usage: chopt-tr-cli <chart folder> [options]
 
   -i, --instrument <guitar|coop|bass|rhythm|keys>   (default guitar)
   -d, --diff <expert|hard|medium|easy>              (default expert)
@@ -23,6 +23,11 @@ Usage: chopt-tr <chart folder> [options]
   -v, --video-lag <ms>        -200 to 200 (default 0)
   -f, --speed <percent>       multiple of 5 (default 100)
   -l, --lefty                 lefty-flip the image
+  -b, --blank                 a blank chart image (no path)
+      --no-bpms               don't draw BPMs
+      --no-solos              don't draw solo sections
+      --no-time-sigs          don't draw time signatures
+      --act-opacity <0-1>     opacity of drawn activations (default 0.33)
 ";
 
 fn main() {
@@ -67,6 +72,14 @@ fn real_main() -> Result<(), String> {
             "-o" | "--output" => output = Some(value(&a)?.into()),
             "-p" | "--precision" => opts.precision = true,
             "-l" | "--lefty" => opts.lefty = true,
+            "-b" | "--blank" => opts.blank = true,
+            "--no-bpms" => opts.draw_bpms = false,
+            "--no-solos" => opts.draw_solos = false,
+            "--no-time-sigs" => opts.draw_time_sigs = false,
+            "--act-opacity" => {
+                let v = value(&a)?;
+                opts.activation_opacity = v.parse::<f32>().map_err(|_| format!("Not a number: {v}"))?.clamp(0.0, 1.0);
+            }
             "-s" | "--squeeze" => opts.squeeze = num(value(&a)?)?.clamp(0, 100) as u32,
             "-e" | "--early-whammy" => opts.early_whammy = num(value(&a)?)?.clamp(0, 100) as u32,
             "-z" | "--lazy-whammy" => opts.lazy_whammy_ms = num(value(&a)?)?.max(0) as u32,
@@ -83,7 +96,9 @@ fn real_main() -> Result<(), String> {
     let ini = std::fs::read(folder.join("song.ini")).unwrap_or_default();
     let song = chopt::load(&data, is_midi, &ini)?;
     let out = chopt::run(song, &opts, &AtomicBool::new(false))?;
-    println!("{}", out.summary);
+    if !out.summary.is_empty() {
+        println!("{}", out.summary);
+    }
     if let Some(path) = output {
         chopt::draw::save_png(&out.image, &path)?;
         println!("Image saved to {}", path.display());

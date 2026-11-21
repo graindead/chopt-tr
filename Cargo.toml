@@ -11,18 +11,42 @@ authors = ["graindead"]
 name = "chopt"
 path = "src/lib.rs"
 
+# The app (Truss-style window). Build only the library and command-line tool with
+# `--no-default-features`.
 [[bin]]
 name = "chopt-tr"
-path = "src/main.rs"
+path = "src/app/main.rs"
+required-features = ["app"]
+
+[[bin]]
+name = "chopt-tr-cli"
+path = "src/cli.rs"
+
+[features]
+default = ["app"]
+app = ["dep:iced", "dep:tokio", "dep:rfd", "dep:serde", "dep:serde_json", "dep:directories"]
 
 [dependencies]
 tiny-skia = "0.11"
 cosmic-text = "0.15"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "bmp"] }
+iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "crisp", "web-colors", "image", "tokio"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "time"], optional = true }
+rfd = { version = "0.18", default-features = false, features = ["xdg-portal", "common-controls-v6"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+directories = { version = "6", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", features = ["Win32_System_Threading"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_UI_HiDpi", "Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 lto = "thin"
 codegen-units = 1
+strip = true
+
+# Copies of two iced 0.14 crates with small changes (marked "Truss patch") that make the
+# frosted glass window work on Windows; see vendor/README.md.
+[patch.crates-io]
+iced_wgpu = { path = "vendor/iced_wgpu" }
+iced_winit = { path = "vendor/iced_winit" }

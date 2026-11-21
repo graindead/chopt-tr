@@ -42,13 +42,29 @@ Times on a 16-thread PC against the CHOpt 1.19 command line, including program s
 
 It covers CHOpt's Clone Hero engine for five-fret parts, from `.chart` and `.mid` files. CHOpt itself also handles drums, GHL, other games' engines and more.
 
-## Use
+## The app
+
+`chopt-tr` is a window styled like Truss, with Truss's themes and its frosted glass on Windows. It has CHOpt's settings, in CHOpt's order:
+
+- Instrument and difficulty
+- Squeeze, early whammy, lazy whammy and whammy delay
+- Song speed, video lag and activation opacity
+- Draw BPMs, Draw Time Signatures and Draw solo sections
+- Blank chart, Precision Mode and Lefty flip
+
+To load a `.chart` or `.mid`, use Load chart, drop the file on the window, or open it with the app. The song.ini is read from the same folder. The path summary and image appear in the window, and Save image writes the image as a PNG or BMP. Your settings are remembered between runs, as in CHOpt.
 
 ```bash
-cargo run --release -- "path/to/song folder" -o path.png
+cargo run --release --bin chopt-tr
 ```
 
-To see all the options, run `chopt-tr --help`. To use it as a library:
+## Command line
+
+```bash
+cargo run --release --bin chopt-tr-cli -- "path/to/song folder" -o path.png
+```
+
+`chopt-tr-cli --help` lists the options, which match CHOpt's command-line flags. To use the code as a library, without the app's dependencies, depend on the crate with `default-features = false`:
 
 ```rust
 let song = chopt::load(&notes_bytes, is_midi, &ini_bytes)?;

@@ -48,6 +48,16 @@ pub struct Options {
     /// Song speed in %, a multiple of 5.
     pub speed: u32,
     pub lefty: bool,
+    /// Image only: tempo markings.
+    pub draw_bpms: bool,
+    /// Image only: solo sections.
+    pub draw_solos: bool,
+    /// Image only: time signatures.
+    pub draw_time_sigs: bool,
+    /// The chart with its Star Power phrases but no path (no optimising).
+    pub blank: bool,
+    /// Image only: how strongly activations are shaded, 0-1.
+    pub activation_opacity: f32,
 }
 
 impl Default for Options {
@@ -63,13 +73,19 @@ impl Default for Options {
             video_lag_ms: 0,
             speed: 100,
             lefty: false,
+            draw_bpms: true,
+            draw_solos: true,
+            draw_time_sigs: true,
+            blank: false,
+            activation_opacity: 0.33,
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Output {
-    /// CHOpt's text summary: the path, scores and how to hit each activation.
+    /// CHOpt's text summary: the path, scores and how to hit each activation (empty for a
+    /// blank chart).
     pub summary: String,
     pub image: PathImage,
 }
@@ -99,13 +115,32 @@ pub fn run(mut song: Song, opts: &Options, cancel: &AtomicBool) -> Result<Output
     let tm = song.tempo_map.clone();
     let time_map = time::SpTimeMap::new(tm.clone(), engine.sp_mode());
     let mut image = PathImage::new(&song, &track, &format!("{} {}", opts.difficulty, opts.instrument), opts.lefty);
+    if !opts.draw_bpms {
+        image.bpms.clear();
+    }
+    if !opts.draw_solos {
+        image.solo_ranges.clear();
+    }
+    if !opts.draw_time_sigs {
+        image.time_sigs.clear();
+    }
     let processed = processed::ProcessedSong::new(&track, &time_map, &[], &settings);
-    let path = optimiser::Optimiser::new(&processed, cancel, settings.whammy_delay).optimal_path().ok_or("Cancelled")?;
-    let summary = processed.path_summary(&path);
     image.add_sp_phrases(&track, &tm, &[]);
-    image.add_sp_acts(&processed.points, &tm, &path);
+    let (path, summary) = if opts.blank {
+        (processed::Path::default(), String::new())
+    } else {
+        let path = optimiser::Optimiser::new(&processed, cancel, settings.whammy_delay).optimal_path().ok_or("Cancelled")?;
+        let summary = processed.path_summary(&path);
+        image.add_sp_acts(&processed.points, &tm, &path);
+        image.activation_opacity = opts.activation_opacity.clamp(0.0, 1.0);
+        (path, summary)
+    };
     image.add_measure_values(&processed.points, &tm, &path);
-    image.add_sp_percent_values(&processed.sp_data, &time_map, &processed.points, &path, &processed);
+    if opts.blank {
+        image.add_sp_values(&processed.sp_data, engine.sp_gain_rate());
+    } else {
+        image.add_sp_percent_values(&processed.sp_data, &time_map, &processed.points, &path, &processed);
+    }
     image.set_total_score(&processed, &path);
     Ok(Output { summary, image })
 }

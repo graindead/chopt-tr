@@ -261,7 +261,13 @@ fn draw_score_totals(cv: &mut Canvas, img: &PathImage) {
         y += 13;
         cv.text_right(x, y, &img.score_values[i].to_string(), [0, 100, 0], FONT_HEIGHT);
         y += 13;
-        if let Some(sp) = img.sp_percent_values.get(i) {
+        if img.sp_percent_values.is_empty() {
+            // A blank chart: the whammy SP on offer, skipped where there's none.
+            match img.sp_values.get(i) {
+                Some(&sp) if sp != 0.0 => cv.text_right(x, y, &format!("{sp:.2}SP"), [0, 160, 160], FONT_HEIGHT),
+                _ => {}
+            }
+        } else if let Some(sp) = img.sp_percent_values.get(i) {
             cv.text_right(x, y, &format!("{:.2}%", 100.0 * sp), [0, 160, 160], FONT_HEIGHT);
         }
     }

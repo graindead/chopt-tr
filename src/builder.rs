@@ -36,6 +36,8 @@ pub struct PathImage {
     pub base_values: Vec<i32>,
     pub score_values: Vec<i32>,
     pub sp_percent_values: Vec<f64>,
+    /// Whammy SP available in each measure (blank charts, which have no path).
+    pub sp_values: Vec<f64>,
     pub song_name: String,
     pub artist: String,
     pub charter: String,
@@ -338,6 +340,19 @@ impl PathImage {
             }
             position = pos;
             total = total.clamp(0.0, 1.0);
+        }
+    }
+
+    /// The SP whammy could give in each measure, in bars (CHOpt's add_sp_values, used for a
+    /// blank chart).
+    pub fn add_sp_values(&mut self, sp_data: &SpData, sp_gain_rate: f64) {
+        let count = self.measure_lines.len().saturating_sub(1);
+        self.sp_values = vec![0.0; count];
+        if sp_gain_rate == 0.0 {
+            return;
+        }
+        for i in 0..count {
+            self.sp_values[i] = sp_data.available_whammy_all(self.measure_lines[i], self.measure_lines[i + 1]) / sp_gain_rate;
         }
     }
 
